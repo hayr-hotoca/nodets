@@ -173,7 +173,7 @@ INSERT INTO divisions (code, name, unit_id) VALUES
     ('DIV-01', 'Phòng Vật tư', 1),
     ('DIV-02', 'Phòng Vật tư 2', 1),
     ('DIV-03', 'Phòng Vật tư 3', 1),
-    ('DIV-04', 'Phòng Vật tư 4 DIV-04', 10)
+    ('DIV-04', 'Phòng Vật tư 4 DIV-04', 2)
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO warehouses (code, name, location, address) VALUES
