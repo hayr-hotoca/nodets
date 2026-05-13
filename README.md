@@ -1,3 +1,5 @@
+Sử dụng ứng dụng tại: https://vimes-nodejs-test.onrender.com/
+
 Lược đồ cấu trúc các bảng cơ sở dữ liệu:
 
 ![Lược đồ cấu trúc các bảng cơ sở dữ liệu](https://i.ibb.co/vx2vGRGx/supabase-schema-vimes-Test.png)
