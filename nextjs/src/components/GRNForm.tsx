@@ -63,9 +63,9 @@ const GRNForm = () => {
       setIsDataLoading(true)
       try {
         const [whRes, unitRes, prodRes] = await Promise.all([
-          fetch('http://localhost:3001/api/warehouses'),
-          fetch('http://localhost:3001/api/units'),
-          fetch('http://localhost:3001/api/products'),
+          fetch('https://vimes-nodejs-test.onrender.com/api/warehouses'),
+          fetch('https://vimes-nodejs-test.onrender.com/api/units'),
+          fetch('https://vimes-nodejs-test.onrender.com/api/products'),
         ])
 
         const whData = await whRes.json()
