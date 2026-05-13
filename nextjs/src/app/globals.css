@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-on-surface min-h-screen;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.paper-shadow {
+  box-shadow: 0px 4px 20px rgba(30, 41, 59, 0.05);
+}
+
+.test-red {
+  @apply bg-red-500 text-white p-4;
+}
