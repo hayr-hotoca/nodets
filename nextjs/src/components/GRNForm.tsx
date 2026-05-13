@@ -24,6 +24,7 @@ const GRNForm = () => {
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null)
   const [productsList, setProductsList] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
+  const [isDataLoading, setIsDataLoading] = useState(false)
 
   const [formData, setFormData] = useState<Partial<CreateGRNDto>>({
     receipt_date: new Date().toISOString().split('T')[0],
@@ -49,6 +50,7 @@ const GRNForm = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      setIsDataLoading(true)
       try {
         const [whRes, unitRes, divRes, prodRes] = await Promise.all([
           fetch('http://localhost:3001/api/warehouses'),
@@ -69,6 +71,8 @@ const GRNForm = () => {
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('Error fetching data:', error)
+      } finally {
+        setIsDataLoading(false)
       }
     }
     fetchData()
@@ -146,7 +150,29 @@ const GRNForm = () => {
   const totalAmount = calculateTotal()
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-[1200px] mx-auto px-4 mt-stack-md flex flex-col gap-stack-lg">
+    <>
+      {isDataLoading && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] transition-all duration-300">
+          <div className="bg-white p-10 rounded-3xl shadow-2xl flex flex-col items-center gap-6 border border-outline-variant animate-in fade-in zoom-in duration-300">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-secondary/20 rounded-full"></div>
+              <div className="w-16 h-16 border-4 border-secondary border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <p className="font-black text-secondary uppercase tracking-[0.2em] text-sm animate-pulse">
+                api data loading
+              </p>
+              <div className="flex gap-1">
+                <div className="w-1.5 h-1.5 bg-secondary/40 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                <div className="w-1.5 h-1.5 bg-secondary/40 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                <div className="w-1.5 h-1.5 bg-secondary/40 rounded-full animate-bounce"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="max-w-[1200px] mx-auto px-4 mt-stack-md flex flex-col gap-stack-lg">
       <div className="bg-white rounded-xl paper-shadow p-stack-md flex flex-col gap-stack-lg border border-outline-variant">
 
         <section className="grid grid-cols-1 gap-stack-md">
@@ -473,6 +499,7 @@ const GRNForm = () => {
         </button>
       </div>
     </form>
+  </>
   )
 }
 
