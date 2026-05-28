@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-surface-container-lowest: 255 255 255;
+    --color-surface-container-low: 244 247 245;
+    --color-surface-container: 238 241 239;
+    --color-surface-container-high: 232 235 233;
+    --color-surface-container-highest: 226 229 227;
+  }
+}
+
+body {
+  background-color: rgb(var(--color-surface-container-lowest));
+  color: #191c1b;
+}
+
+@layer utilities {
+  .paper-shadow {
+    box-shadow: 0px 4px 16px rgba(0, 0, 0, 0.05), 0px 1px 4px rgba(0, 0, 0, 0.02);
+  }
+}

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
+import { useQuery } from '@tanstack/react-query'
 
 import {
   Product,
@@ -20,7 +21,6 @@ import numberToWords from '../utils/number-to-words'
 const GRNForm = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const [units, setUnits] = useState<Unit[]>([])
-  const [divisions, setDivisions] = useState<Division[]>([])
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null)
   const [productsList, setProductsList] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
@@ -48,25 +48,32 @@ const GRNForm = () => {
     }],
   })
 
+  const { data: divisions = [], isLoading: isDivisionsLoading } = useQuery({
+    queryKey: ['divisions'],
+    queryFn: async () => {
+      const res = await fetch('http://localhost:3001/api/divisions')
+      if (!res.ok) throw new Error('Failed to fetch divisions')
+      const json = await res.json()
+      return (json.data || []) as Division[]
+    }
+  })
+
   useEffect(() => {
     const fetchData = async () => {
       setIsDataLoading(true)
       try {
-        const [whRes, unitRes, divRes, prodRes] = await Promise.all([
+        const [whRes, unitRes, prodRes] = await Promise.all([
           fetch('http://localhost:3001/api/warehouses'),
           fetch('http://localhost:3001/api/units'),
-          fetch('http://localhost:3001/api/divisions'),
           fetch('http://localhost:3001/api/products'),
         ])
 
         const whData = await whRes.json()
         const unitData = await unitRes.json()
-        const divData = await divRes.json()
         const prodData = await prodRes.json()
 
         setWarehouses(whData.data || [])
         setUnits(unitData.data || [])
-        setDivisions(divData.data || [])
         setProductsList(prodData.data || [])
       } catch (error) {
         // eslint-disable-next-line no-console
@@ -151,7 +158,7 @@ const GRNForm = () => {
 
   return (
     <>
-      {isDataLoading && (
+      {(isDataLoading || isDivisionsLoading) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] transition-all duration-300">
           <div className="bg-white p-10 rounded-3xl shadow-2xl flex flex-col items-center gap-6 border border-outline-variant animate-in fade-in zoom-in duration-300">
             <div className="relative">

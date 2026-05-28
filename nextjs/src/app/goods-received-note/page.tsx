@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import GRNForm from '../../components/GRNForm'
 
 const GoodsReceivedNotePage = () => (
@@ -12,7 +13,11 @@ const GoodsReceivedNotePage = () => (
           <h1 className="font-headline-md text-headline-md text-primary dark:text-inverse-primary truncate">Phiếu Nhập Kho</h1>
         </div>
         <button type="button" className="active:opacity-80 transition-opacity">
-          <span className="material-symbols-outlined text-primary dark:text-inverse-primary">print</span>
+          <span className="material-symbols-outlined text-primary dark:text-inverse-primary">
+            <Link 
+          href="/division/" 
+          className="h-10 px-4 bg-primary hover:bg-primary-dark text-on-primary font-medium rounded-full flex items-center transition-colors"
+        >print</Link></span>
         </button>
       </div>
     </header>
