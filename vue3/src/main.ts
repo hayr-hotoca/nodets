@@ -1,4 +1,5 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
 import Vue3Toastify, { type ToastContainerOptions } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
@@ -15,7 +16,9 @@ const queryClient = new QueryClient({
 })
 
 const app = createApp(App)
+const pinia = createPinia()
 
+app.use(pinia)
 app.use(router)
 app.use(VueQueryPlugin, { queryClient })
 app.use(Vue3Toastify, {

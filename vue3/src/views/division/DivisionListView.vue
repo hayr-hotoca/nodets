@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
 import { api } from '../../services/api'
+import type { Division } from '../../types/api'
 
 const { data, isLoading, isError, error } = useQuery<Division[]>({
   queryKey: ['divisions'],
