@@ -15,18 +15,18 @@ export interface GoodsReceivedNoteProduct {
 
 export interface GoodsReceivedNote {
   id: number;
-  receipt_date: string;
+  receipt_date: Date;
   deliverer_name: string | null;
   preparer_name: string | null;
   storekeeper_name: string | null;
   chief_accountant_name: string | null;
-  delivery_date: string | null;
+  delivery_date: Date | null;
   warehouse_id: number;
   warehouse_name?: string;
   division_id: number | null;
   ref_doc_type: string | null;
   ref_doc_number: string | null;
-  ref_doc_date: string | null;
+  ref_doc_date: Date | null;
   ref_doc_issuer: string | null;
   debit_amount: number;
   credit_amount: number;

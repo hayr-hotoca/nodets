@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { PoolClient } from 'pg';
 import { numberToWords } from '../../common/utils/number-to-words';
 import { DatabaseService } from '../../database/database.service';
 import {
@@ -29,155 +28,158 @@ export class GoodsReceivedNoteRepository {
       search,
     } = params;
     const offset = (page - 1) * limit;
-    const conditions: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
 
-    if (warehouseId) { conditions.push(`wr.warehouse_id = $${idx++}`); values.push(warehouseId); }
-    if (divisionId) { conditions.push(`wr.division_id = $${idx++}`); values.push(divisionId); }
-    if (dateFrom) { conditions.push(`wr.receipt_date >= $${idx++}`); values.push(dateFrom); }
-    if (dateTo) { conditions.push(`wr.receipt_date <= $${idx++}`); values.push(dateTo); }
-    if (search) {
-      conditions.push(`(wr.deliverer_name ILIKE $${idx})`);
-      values.push(`%${search}%`);
-      idx++;
-    }
+    const where: any = {};
+    if (warehouseId) where.warehouse_id = warehouseId;
+    if (divisionId) where.division_id = divisionId;
+    if (dateFrom) where.receipt_date = { ...where.receipt_date, gte: dateFrom };
+    if (dateTo) where.receipt_date = { ...where.receipt_date, lte: dateTo };
+    if (search) where.deliverer_name = { contains: search, mode: 'insensitive' };
 
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [total, rows] = await Promise.all([
+      this.db.goodsReceivedNote.count({ where }),
+      this.db.goodsReceivedNote.findMany({
+        where,
+        include: {
+          warehouse: {
+            select: { name: true },
+          },
+        },
+        orderBy: [
+          { receipt_date: 'desc' },
+          { id: 'desc' },
+        ],
+        take: limit,
+        skip: offset,
+      }),
+    ]);
 
-    const countResult = await this.db.query<{ total: string }>(
-      `SELECT COUNT(*) AS total FROM goods_received_notes wr ${where}`,
-      values,
-    );
-
-    const dataResult = await this.db.query<GoodsReceivedNote>(
-      `SELECT wr.*, w.name AS warehouse_name
-       FROM goods_received_notes wr
-       LEFT JOIN warehouses w ON w.id = wr.warehouse_id
-       ${where}
-       ORDER BY wr.receipt_date DESC, wr.id DESC
-       LIMIT $${idx} OFFSET $${idx + 1}`,
-      [...values, limit, offset],
-    );
+    const receiptsWithWarehouseName = rows.map((row) => ({
+      ...row,
+      warehouse_name: row.warehouse?.name ?? null,
+      debit_amount: Number(row.debit_amount),
+      credit_amount: Number(row.credit_amount),
+    }));
 
     return {
-      rows: dataResult.rows,
-      total: parseInt(countResult.rows[0].total, 10),
+      rows: receiptsWithWarehouseName as GoodsReceivedNote[],
+      total,
     };
   }
 
   async findById(id: number): Promise<GoodsReceivedNote | null> {
-    const receiptResult = await this.db.query<GoodsReceivedNote>(
-      `SELECT wr.*, w.name AS warehouse_name
-       FROM goods_received_notes wr
-       LEFT JOIN warehouses w ON w.id = wr.warehouse_id
-       WHERE wr.id = $1`,
-      [id],
-    );
+    const receipt = await this.db.goodsReceivedNote.findUnique({
+      where: { id },
+      include: {
+        warehouse: {
+          select: { name: true },
+        },
+        products: {
+          include: {
+            product: {
+              select: { name: true, code: true },
+            },
+          },
+        },
+      },
+    });
 
-    if (receiptResult.rows.length === 0) {
-      return null;
-    }
+    if (!receipt) return null;
 
-    const receipt = receiptResult.rows[0];
-    const productsResult = await this.db.query<GoodsReceivedNoteProduct>(
-      `SELECT grp.*, p.name as product_name, p.code as product_code
-       FROM goods_received_note_products grp
-       JOIN products p ON grp.product_id = p.id
-       WHERE grp.grn_id = $1`,
-      [id],
-    );
+    const productsWithProductInfo = receipt.products.map((p) => ({
+      ...p,
+      product_name: p.product.name,
+      product_code: p.product.code,
+      qty_actual: Number(p.qty_actual),
+      qty_document: Number(p.qty_document),
+      unit_price: Number(p.unit_price),
+      total_amount: Number(p.total_amount),
+    }));
 
-    receipt.products = productsResult.rows;
-    return receipt;
+    return {
+      ...receipt,
+      warehouse_name: receipt.warehouse?.name ?? null,
+      debit_amount: Number(receipt.debit_amount),
+      credit_amount: Number(receipt.credit_amount),
+      products: productsWithProductInfo as GoodsReceivedNoteProduct[],
+    } as GoodsReceivedNote;
   }
 
   async create(dto: CreateGoodsReceivedNoteDto): Promise<GoodsReceivedNote> {
-    return this.db.withTransaction(async (client: PoolClient) => {
-      const headerResult = await client.query<GoodsReceivedNote>(
-        `INSERT INTO goods_received_notes (
-           receipt_date, warehouse_id, division_id,
-           deliverer_name, preparer_name, storekeeper_name, chief_accountant_name, delivery_date,
-           ref_doc_type, ref_doc_number, ref_doc_date, ref_doc_issuer,
-           debit_amount, credit_amount, source_documents
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-         RETURNING *`,
-        [
-          dto.receipt_date,
-          dto.warehouse_id,
-          dto.division_id ?? null,
-          dto.deliverer_name ?? null,
-          dto.preparer_name ?? null,
-          dto.storekeeper_name ?? null,
-          dto.chief_accountant_name ?? null,
-          dto.delivery_date ?? null,
-          dto.ref_doc_type ?? null,
-          dto.ref_doc_number ?? null,
-          dto.ref_doc_date ?? null,
-          dto.ref_doc_issuer ?? null,
-          dto.debit_amount ?? 0,
-          dto.credit_amount ?? 0,
-          dto.source_documents ?? null,
-        ],
-      );
+    return this.db.withTransaction(async () => {
+      const receipt = await this.db.goodsReceivedNote.create({
+        data: {
+          receipt_date: new Date(dto.receipt_date),
+          warehouse_id: dto.warehouse_id,
+          division_id: dto.division_id,
+          deliverer_name: dto.deliverer_name,
+          preparer_name: dto.preparer_name,
+          storekeeper_name: dto.storekeeper_name,
+          chief_accountant_name: dto.chief_accountant_name,
+          delivery_date: dto.delivery_date ? new Date(dto.delivery_date) : null,
+          ref_doc_type: dto.ref_doc_type,
+          ref_doc_number: dto.ref_doc_number,
+          ref_doc_date: dto.ref_doc_date ? new Date(dto.ref_doc_date) : null,
+          ref_doc_issuer: dto.ref_doc_issuer,
+          debit_amount: dto.debit_amount ?? 0,
+          credit_amount: dto.credit_amount ?? 0,
+          source_documents: dto.source_documents,
+        },
+      });
 
-      const receipt = headerResult.rows[0];
-      await this.insertProducts(client, receipt.id, dto.products);
+      await this.insertProducts(receipt.id, dto.products);
 
       return (await this.findById(receipt.id))!;
     });
   }
 
   async update(id: number, dto: UpdateGoodsReceivedNoteDto): Promise<GoodsReceivedNote | null> {
-    return this.db.withTransaction(async (client: PoolClient) => {
+    return this.db.withTransaction(async () => {
       const oldReceipt = await this.findById(id);
-      if (!oldReceipt) {
-        return null;
-      }
+      if (!oldReceipt) return null;
 
-      const fields: string[] = [];
-      const values: unknown[] = [];
-      let idx = 1;
+      const data: any = {};
+      if (dto.receipt_date !== undefined) data.receipt_date = dto.receipt_date;
+      if (dto.deliverer_name !== undefined) data.deliverer_name = dto.deliverer_name;
+      if (dto.preparer_name !== undefined) data.preparer_name = dto.preparer_name;
+      if (dto.storekeeper_name !== undefined) data.storekeeper_name = dto.storekeeper_name;
+      if (dto.chief_accountant_name !== undefined) data.chief_accountant_name = dto.chief_accountant_name;
+      if (dto.delivery_date !== undefined) data.delivery_date = dto.delivery_date;
+      if (dto.warehouse_id !== undefined) data.warehouse_id = dto.warehouse_id;
+      if (dto.division_id !== undefined) data.division_id = dto.division_id;
+      if (dto.ref_doc_type !== undefined) data.ref_doc_type = dto.ref_doc_type;
+      if (dto.ref_doc_number !== undefined) data.ref_doc_number = dto.ref_doc_number;
+      if (dto.ref_doc_date !== undefined) data.ref_doc_date = dto.ref_doc_date;
+      if (dto.ref_doc_issuer !== undefined) data.ref_doc_issuer = dto.ref_doc_issuer;
+      if (dto.debit_amount !== undefined) data.debit_amount = dto.debit_amount;
+      if (dto.credit_amount !== undefined) data.credit_amount = dto.credit_amount;
+      if (dto.source_documents !== undefined) data.source_documents = dto.source_documents;
 
-      if (dto.receipt_date !== undefined) { fields.push(`receipt_date = $${idx++}`); values.push(dto.receipt_date); }
-      if (dto.deliverer_name !== undefined) { fields.push(`deliverer_name = $${idx++}`); values.push(dto.deliverer_name); }
-      if (dto.preparer_name !== undefined) { fields.push(`preparer_name = $${idx++}`); values.push(dto.preparer_name); }
-      if (dto.storekeeper_name !== undefined) { fields.push(`storekeeper_name = $${idx++}`); values.push(dto.storekeeper_name); }
-      if (dto.chief_accountant_name !== undefined) { fields.push(`chief_accountant_name = $${idx++}`); values.push(dto.chief_accountant_name); }
-      if (dto.delivery_date !== undefined) { fields.push(`delivery_date = $${idx++}`); values.push(dto.delivery_date); }
-      if (dto.warehouse_id !== undefined) { fields.push(`warehouse_id = $${idx++}`); values.push(dto.warehouse_id); }
-      if (dto.division_id !== undefined) { fields.push(`division_id = $${idx++}`); values.push(dto.division_id); }
-      if (dto.ref_doc_type !== undefined) { fields.push(`ref_doc_type = $${idx++}`); values.push(dto.ref_doc_type); }
-      if (dto.ref_doc_number !== undefined) { fields.push(`ref_doc_number = $${idx++}`); values.push(dto.ref_doc_number); }
-      if (dto.ref_doc_date !== undefined) { fields.push(`ref_doc_date = $${idx++}`); values.push(dto.ref_doc_date); }
-      if (dto.ref_doc_issuer !== undefined) { fields.push(`ref_doc_issuer = $${idx++}`); values.push(dto.ref_doc_issuer); }
-      if (dto.debit_amount !== undefined) { fields.push(`debit_amount = $${idx++}`); values.push(dto.debit_amount); }
-      if (dto.credit_amount !== undefined) { fields.push(`credit_amount = $${idx++}`); values.push(dto.credit_amount); }
-      if (dto.source_documents !== undefined) { fields.push(`source_documents = $${idx++}`); values.push(dto.source_documents); }
-
-      if (fields.length > 0) {
-        values.push(id);
-        await client.query(
-          `UPDATE goods_received_notes SET ${fields.join(', ')} WHERE id = $${idx}`,
-          values,
-        );
+      if (Object.keys(data).length > 0) {
+        await this.db.goodsReceivedNote.update({
+          where: { id },
+          data,
+        });
       }
 
       if (dto.products) {
         if (oldReceipt.products) {
           for (const product of oldReceipt.products) {
-            await client.query(
-              `UPDATE product_stock_summaries
-               SET total_actual_qty = total_actual_qty - $1,
-                   total_document_qty = total_document_qty - $2
-               WHERE product_id = $3`,
-              [product.qty_actual, product.qty_document, product.product_id],
-            );
+            await this.db.productStockSummary.update({
+              where: { product_id: product.product_id },
+              data: {
+                total_actual_qty: { decrement: product.qty_actual },
+                total_document_qty: { decrement: product.qty_document },
+              },
+            });
           }
         }
 
-        await client.query('DELETE FROM goods_received_note_products WHERE grn_id = $1', [id]);
-        await this.insertProducts(client, id, dto.products);
+        await this.db.goodsReceivedNoteProduct.deleteMany({
+          where: { grn_id: id },
+        });
+
+        await this.insertProducts(id, dto.products);
       }
 
       return this.findById(id);
@@ -185,31 +187,28 @@ export class GoodsReceivedNoteRepository {
   }
 
   async delete(id: number): Promise<boolean> {
-    return this.db.withTransaction(async (client: PoolClient) => {
+    return this.db.withTransaction(async () => {
       const receipt = await this.findById(id);
-      if (!receipt) {
-        return false;
-      }
+      if (!receipt) return false;
 
       if (receipt.products) {
         for (const product of receipt.products) {
-          await client.query(
-            `UPDATE product_stock_summaries
-             SET total_actual_qty = total_actual_qty - $1,
-                 total_document_qty = total_document_qty - $2
-             WHERE product_id = $3`,
-            [product.qty_actual, product.qty_document, product.product_id],
-          );
+          await this.db.productStockSummary.update({
+            where: { product_id: product.product_id },
+            data: {
+              total_actual_qty: { decrement: product.qty_actual },
+              total_document_qty: { decrement: product.qty_document },
+            },
+          });
         }
       }
 
-      const result = await client.query('DELETE FROM goods_received_notes WHERE id = $1', [id]);
-      return (result.rowCount ?? 0) > 0;
+      await this.db.goodsReceivedNote.delete({ where: { id } });
+      return true;
     });
   }
 
   private async insertProducts(
-    client: PoolClient,
     grnId: number,
     products: CreateGoodsReceivedNoteDto['products'],
   ): Promise<void> {
@@ -217,29 +216,30 @@ export class GoodsReceivedNoteRepository {
       const totalAmount = product.qty_actual * product.unit_price;
       const totalAmountInWords = numberToWords(totalAmount);
 
-      await client.query(
-        `INSERT INTO goods_received_note_products (
-           grn_id, product_id, qty_actual, qty_document, unit_price, total_amount, total_amount_in_words
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          grnId,
-          product.product_id,
-          product.qty_actual,
-          product.qty_document,
-          product.unit_price,
-          totalAmount,
-          totalAmountInWords,
-        ],
-      );
+      await this.db.goodsReceivedNoteProduct.create({
+        data: {
+          grn_id: grnId,
+          product_id: product.product_id,
+          qty_actual: product.qty_actual,
+          qty_document: product.qty_document,
+          unit_price: product.unit_price,
+          total_amount: totalAmount,
+          total_amount_in_words: totalAmountInWords,
+        },
+      });
 
-      await client.query(
-        `INSERT INTO product_stock_summaries (product_id, total_actual_qty, total_document_qty)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (product_id) DO UPDATE
-         SET total_actual_qty = product_stock_summaries.total_actual_qty + EXCLUDED.total_actual_qty,
-             total_document_qty = product_stock_summaries.total_document_qty + EXCLUDED.total_document_qty`,
-        [product.product_id, product.qty_actual, product.qty_document],
-      );
+      await this.db.productStockSummary.upsert({
+        where: { product_id: product.product_id },
+        create: {
+          product_id: product.product_id,
+          total_actual_qty: product.qty_actual,
+          total_document_qty: product.qty_document,
+        },
+        update: {
+          total_actual_qty: { increment: product.qty_actual },
+          total_document_qty: { increment: product.qty_document },
+        },
+      });
     }
   }
 }

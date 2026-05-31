@@ -14,94 +14,92 @@ export class DivisionRepository {
   async findAll(params: ListDivisionQueryDto): Promise<{ rows: Division[]; total: number }> {
     const { page = 1, limit = 20, search, unit_id: unitId } = params;
     const offset = (page - 1) * limit;
-    const conditions: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
 
+    const where: any = {};
     if (search) {
-      conditions.push(`(d.code ILIKE $${idx} OR d.name ILIKE $${idx})`);
-      values.push(`%${search}%`);
-      idx++;
+      where.OR = [
+        { code: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+      ];
     }
-
     if (unitId) {
-      conditions.push(`d.unit_id = $${idx}`);
-      values.push(unitId);
-      idx++;
+      where.unit_id = unitId;
     }
 
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [total, rows] = await Promise.all([
+      this.db.division.count({ where }),
+      this.db.division.findMany({
+        where,
+        include: { unit: { select: { name: true } } },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
 
-    const countResult = await this.db.query<{ total: string }>(
-      `SELECT COUNT(*) AS total FROM divisions d ${where}`,
-      values,
-    );
-
-    const dataResult = await this.db.query<Division>(
-      `SELECT d.*, u.name as unit_name
-       FROM divisions d
-       LEFT JOIN units u ON d.unit_id = u.id
-       ${where}
-       ORDER BY d.created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
-      [...values, limit, offset],
-    );
+    const divisionsWithUnitName = rows.map((row) => ({
+      ...row,
+      unit_name: row.unit?.name ?? null,
+    }));
 
     return {
-      rows: dataResult.rows,
-      total: parseInt(countResult.rows[0].total, 10),
+      rows: divisionsWithUnitName as Division[],
+      total,
     };
   }
 
   async findById(id: number): Promise<Division | null> {
-    const result = await this.db.query<Division>(
-      `SELECT d.*, u.name as unit_name
-       FROM divisions d
-       LEFT JOIN units u ON d.unit_id = u.id
-       WHERE d.id = $1`,
-      [id],
-    );
-    return result.rows[0] ?? null;
+    const row = await this.db.division.findUnique({
+      where: { id },
+      include: { unit: { select: { name: true } } },
+    });
+
+    if (!row) return null;
+
+    return {
+      ...row,
+      unit_name: row.unit?.name ?? null,
+    } as Division;
   }
 
   async findByCode(code: string): Promise<Division | null> {
-    const result = await this.db.query<Division>(
-      'SELECT * FROM divisions WHERE code = $1',
-      [code],
-    );
-    return result.rows[0] ?? null;
+    return this.db.division.findUnique({
+      where: { code },
+    });
   }
 
   async create(dto: CreateDivisionDto): Promise<Division> {
-    const result = await this.db.query<Division>(
-      `INSERT INTO divisions (code, name, unit_id) VALUES ($1, $2, $3) RETURNING *`,
-      [dto.code, dto.name, dto.unit_id],
-    );
-    return result.rows[0];
+    return this.db.division.create({
+      data: {
+        code: dto.code,
+        name: dto.name,
+        unit_id: dto.unit_id,
+      },
+    });
   }
 
   async update(id: number, dto: UpdateDivisionDto): Promise<Division | null> {
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
+    const data: any = {};
+    if (dto.code !== undefined) data.code = dto.code;
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.unit_id !== undefined) data.unit_id = dto.unit_id;
 
-    if (dto.code !== undefined) { fields.push(`code = $${idx++}`); values.push(dto.code); }
-    if (dto.name !== undefined) { fields.push(`name = $${idx++}`); values.push(dto.name); }
-    if (dto.unit_id !== undefined) { fields.push(`unit_id = $${idx++}`); values.push(dto.unit_id); }
-
-    if (fields.length === 0) {
+    if (Object.keys(data).length === 0) {
       return this.findById(id);
     }
 
-    values.push(id);
-    const result = await this.db.query<Division>(
-      `UPDATE divisions SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
-      values,
-    );
-    return result.rows[0] ?? null;
+    return this.db.division.update({
+      where: { id },
+      data,
+    });
   }
 
   async delete(id: number): Promise<boolean> {
-    const result = await this.db.query('DELETE FROM divisions WHERE id = $1', [id]);
-    return (result.rowCount ?? 0) > 0;
+    try {
+      await this.db.division.delete({ where: { id } });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

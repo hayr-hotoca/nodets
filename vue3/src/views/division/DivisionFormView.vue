@@ -49,7 +49,8 @@ const validate = () => {
 }
 
 const handleSubmit = async () => {
-  if (!validate()) return
+  const validated = validate();
+  if (!validated) return
 
   isSubmitting.value = true
   try {

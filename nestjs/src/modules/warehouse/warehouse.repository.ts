@@ -14,92 +14,83 @@ export class WarehouseRepository {
   async findAll(params: ListWarehouseQueryDto): Promise<{ rows: Warehouse[]; total: number }> {
     const { page = 1, limit = 20, search, is_active: isActive } = params;
     const offset = (page - 1) * limit;
-    const conditions: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
 
+    const where: any = {};
     if (search) {
-      conditions.push(`(code ILIKE $${idx} OR name ILIKE $${idx})`);
-      values.push(`%${search}%`);
-      idx++;
+      where.OR = [
+        { code: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+      ];
     }
-
     if (isActive !== undefined) {
-      conditions.push(`is_active = $${idx}`);
-      values.push(isActive === 'true');
-      idx++;
+      where.is_active = isActive === 'true';
     }
 
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const countResult = await this.db.query<{ total: string }>(
-      `SELECT COUNT(*) AS total FROM warehouses ${where}`,
-      values,
-    );
-
-    const dataResult = await this.db.query<Warehouse>(
-      `SELECT * FROM warehouses ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
-      [...values, limit, offset],
-    );
+    const [total, rows] = await Promise.all([
+      this.db.warehouse.count({ where }),
+      this.db.warehouse.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
 
     return {
-      rows: dataResult.rows,
-      total: parseInt(countResult.rows[0].total, 10),
+      rows: rows as Warehouse[],
+      total,
     };
   }
 
   async findById(id: number): Promise<Warehouse | null> {
-    const result = await this.db.query<Warehouse>(
-      'SELECT * FROM warehouses WHERE id = $1',
-      [id],
-    );
-    return result.rows[0] ?? null;
+    return this.db.warehouse.findUnique({
+      where: { id },
+    });
   }
 
   async findByCode(code: string): Promise<Warehouse | null> {
-    const result = await this.db.query<Warehouse>(
-      'SELECT * FROM warehouses WHERE code = $1',
-      [code],
-    );
-    return result.rows[0] ?? null;
+    return this.db.warehouse.findUnique({
+      where: { code },
+    });
   }
 
   async create(dto: CreateWarehouseDto): Promise<Warehouse> {
-    const result = await this.db.query<Warehouse>(
-      `INSERT INTO warehouses (code, name, location, address, manager_name)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [dto.code, dto.name, dto.location ?? null, dto.address ?? null, dto.manager_name ?? null],
-    );
-    return result.rows[0];
+    return this.db.warehouse.create({
+      data: {
+        code: dto.code,
+        name: dto.name,
+        location: dto.location,
+        address: dto.address,
+        manager_name: dto.manager_name,
+      },
+    });
   }
 
   async update(id: number, dto: UpdateWarehouseDto): Promise<Warehouse | null> {
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
+    const data: any = {};
+    if (dto.code !== undefined) data.code = dto.code;
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.location !== undefined) data.location = dto.location;
+    if (dto.address !== undefined) data.address = dto.address;
+    if (dto.manager_name !== undefined) data.manager_name = dto.manager_name;
+    if (dto.is_active !== undefined) data.is_active = dto.is_active;
 
-    if (dto.code !== undefined) { fields.push(`code = $${idx++}`); values.push(dto.code); }
-    if (dto.name !== undefined) { fields.push(`name = $${idx++}`); values.push(dto.name); }
-    if (dto.location !== undefined) { fields.push(`location = $${idx++}`); values.push(dto.location); }
-    if (dto.address !== undefined) { fields.push(`address = $${idx++}`); values.push(dto.address); }
-    if (dto.manager_name !== undefined) { fields.push(`manager_name = $${idx++}`); values.push(dto.manager_name); }
-    if (dto.is_active !== undefined) { fields.push(`is_active = $${idx++}`); values.push(dto.is_active); }
-
-    if (fields.length === 0) {
+    if (Object.keys(data).length === 0) {
       return this.findById(id);
     }
 
-    values.push(id);
-    const result = await this.db.query<Warehouse>(
-      `UPDATE warehouses SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
-      values,
-    );
-    return result.rows[0] ?? null;
+    return this.db.warehouse.update({
+      where: { id },
+      data,
+    });
   }
 
   async delete(id: number): Promise<boolean> {
-    const result = await this.db.query('DELETE FROM warehouses WHERE id = $1', [id]);
-    return (result.rowCount ?? 0) > 0;
+    try {
+      await this.db.warehouse.delete({ where: { id } });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

@@ -1,0 +1,123 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Unit {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique @db.VarChar(20)
+  name       String   @db.VarChar(200)
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  divisions Division[]
+
+  @@map("units")
+}
+
+model Division {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique @db.VarChar(20)
+  name       String   @db.VarChar(200)
+  unit_id    Int?
+  unit       Unit?    @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  goodsReceivedNotes GoodsReceivedNote[]
+
+  @@map("divisions")
+}
+
+model Warehouse {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique @db.VarChar(20)
+  name         String   @db.VarChar(200)
+  location     String?  @db.VarChar(300)
+  address      String?  @db.Text
+  manager_name String?  @db.VarChar(150)
+  is_active    Boolean  @default(true) @map("is_active")
+  created_at   DateTime @default(now()) @db.Timestamptz
+  updated_at   DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  goodsReceivedNotes GoodsReceivedNote[]
+
+  @@map("warehouses")
+}
+
+model Product {
+  id                Int                  @id @default(autoincrement())
+  code              String               @unique @db.VarChar(50)
+  name              String               @db.VarChar(300)
+  description       String?              @db.Text
+  calculation_unit  String?              @db.VarChar(30)
+  created_at        DateTime             @default(now()) @db.Timestamptz
+  updated_at        DateTime             @default(now()) @updatedAt @db.Timestamptz
+
+  goodsReceivedNoteProducts GoodsReceivedNoteProduct[]
+  stockSummary              ProductStockSummary?
+
+  @@map("products")
+}
+
+model GoodsReceivedNote {
+  id                     Int                      @id @default(autoincrement())
+  receipt_date           DateTime                 @db.Date
+  deliverer_name         String?                  @db.VarChar(200)
+  preparer_name          String?                  @db.VarChar(200)
+  storekeeper_name       String?                  @db.VarChar(200)
+  chief_accountant_name  String?                  @db.VarChar(200)
+  delivery_date         DateTime?                @db.Date
+  warehouse_id           Int
+  warehouse              Warehouse                @relation(fields: [warehouse_id], references: [id])
+  division_id            Int?
+  division               Division?                @relation(fields: [division_id], references: [id], onDelete: SetNull)
+  ref_doc_type           String?                  @db.VarChar(100)
+  ref_doc_number         String?                  @db.VarChar(50)
+  ref_doc_date           DateTime?                @db.Date
+  ref_doc_issuer         String?                  @db.VarChar(200)
+  debit_amount           Decimal                  @default(0) @db.Decimal(18, 2)
+  credit_amount          Decimal                  @default(0) @db.Decimal(18, 2)
+  source_documents       Int?
+  created_at             DateTime                 @default(now()) @db.Timestamptz
+  updated_at             DateTime                 @default(now()) @updatedAt @db.Timestamptz
+
+  products GoodsReceivedNoteProduct[]
+
+  @@map("goods_received_notes")
+}
+
+model GoodsReceivedNoteProduct {
+  id                      Int              @id @default(autoincrement())
+  grn_id                  Int
+  grn                     GoodsReceivedNote @relation(fields: [grn_id], references: [id], onDelete: Cascade)
+  product_id              Int
+  product                 Product          @relation(fields: [product_id], references: [id])
+  qty_actual              Decimal          @default(0) @db.Decimal(15, 3)
+  qty_document            Decimal          @default(0) @db.Decimal(15, 3)
+  unit_price              Decimal          @default(0) @db.Decimal(18, 2)
+  total_amount            Decimal          @default(0) @db.Decimal(18, 2)
+  total_amount_in_words   String?          @db.Text
+  created_at              DateTime         @default(now()) @db.Timestamptz
+  updated_at              DateTime         @default(now()) @updatedAt @db.Timestamptz
+
+  @@map("goods_received_note_products")
+}
+
+model ProductStockSummary {
+  id                 Int      @id @default(autoincrement())
+  product_id         Int      @unique
+  product            Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  total_actual_qty   Decimal  @default(0) @db.Decimal(15, 3)
+  total_document_qty Decimal  @default(0) @db.Decimal(15, 3)
+  created_at         DateTime @default(now()) @db.Timestamptz
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  @@map("product_stock_summaries")
+}

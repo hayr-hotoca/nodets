@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { PoolClient } from 'pg';
 import { DatabaseService } from '../../database/database.service';
 import {
   CreateProductDto,
@@ -15,101 +14,117 @@ export class ProductRepository {
   async findAll(params: ListProductQueryDto): Promise<{ rows: Product[]; total: number }> {
     const { page = 1, limit = 20, search } = params;
     const offset = (page - 1) * limit;
-    const conditions: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
 
+    const where: any = {};
     if (search) {
-      conditions.push(`(p.code ILIKE $${idx} OR p.name ILIKE $${idx})`);
-      values.push(`%${search}%`);
-      idx++;
+      where.OR = [
+        { code: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [total, rows] = await Promise.all([
+      this.db.product.count({ where }),
+      this.db.product.findMany({
+        where,
+        include: {
+          stockSummary: {
+            select: {
+              total_actual_qty: true,
+              total_document_qty: true,
+            },
+          },
+        },
+        orderBy: { code: 'asc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
 
-    const countResult = await this.db.query<{ total: string }>(
-      `SELECT COUNT(*) AS total FROM products p ${where}`,
-      values,
-    );
-
-    const dataResult = await this.db.query<Product>(
-      `SELECT p.*, s.total_actual_qty, s.total_document_qty
-       FROM products p
-       LEFT JOIN product_stock_summaries s ON s.product_id = p.id
-       ${where}
-       ORDER BY p.code
-       LIMIT $${idx} OFFSET $${idx + 1}`,
-      [...values, limit, offset],
-    );
+    const productsWithStock = rows.map((row) => ({
+      ...row,
+      total_actual_qty: row.stockSummary?.total_actual_qty ?? 0,
+      total_document_qty: row.stockSummary?.total_document_qty ?? 0,
+    }));
 
     return {
-      rows: dataResult.rows,
-      total: parseInt(countResult.rows[0].total, 10),
+      rows: productsWithStock as Product[],
+      total,
     };
   }
 
   async findById(id: number): Promise<Product | null> {
-    const result = await this.db.query<Product>(
-      `SELECT p.*, s.total_actual_qty, s.total_document_qty
-       FROM products p
-       LEFT JOIN product_stock_summaries s ON s.product_id = p.id
-       WHERE p.id = $1`,
-      [id],
-    );
-    return result.rows[0] ?? null;
+    const row = await this.db.product.findUnique({
+      where: { id },
+      include: {
+        stockSummary: {
+          select: {
+            total_actual_qty: true,
+            total_document_qty: true,
+          },
+        },
+      },
+    });
+
+    if (!row) return null;
+
+    return {
+      ...row,
+      total_actual_qty: row.stockSummary?.total_actual_qty ?? 0,
+      total_document_qty: row.stockSummary?.total_document_qty ?? 0,
+    } as Product;
   }
 
   async findByCode(code: string): Promise<Product | null> {
-    const result = await this.db.query<Product>(
-      'SELECT * FROM products WHERE code = $1',
-      [code],
-    );
-    return result.rows[0] ?? null;
+    return this.db.product.findUnique({
+      where: { code },
+    });
   }
 
   async create(dto: CreateProductDto): Promise<Product> {
-    return this.db.withTransaction(async (client: PoolClient) => {
-      const result = await client.query<Product>(
-        `INSERT INTO products (code, name, description, calculation_unit)
-         VALUES ($1, $2, $3, $4)
-         RETURNING *`,
-        [dto.code, dto.name, dto.description ?? null, dto.calculation_unit ?? null],
-      );
-      const product = result.rows[0];
+    return this.db.withTransaction(async () => {
+      const product = await this.db.product.create({
+        data: {
+          code: dto.code,
+          name: dto.name,
+          description: dto.description,
+          calculation_unit: dto.calculation_unit,
+        },
+      });
 
-      await client.query(
-        `INSERT INTO product_stock_summaries (product_id) VALUES ($1)`,
-        [product.id],
-      );
+      await this.db.productStockSummary.create({
+        data: {
+          product_id: product.id,
+        },
+      });
 
       return product;
     });
   }
 
   async update(id: number, dto: UpdateProductDto): Promise<Product | null> {
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
+    const data: any = {};
+    if (dto.code !== undefined) data.code = dto.code;
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.calculation_unit !== undefined) data.calculation_unit = dto.calculation_unit;
 
-    if (dto.code !== undefined) { fields.push(`code = $${idx++}`); values.push(dto.code); }
-    if (dto.name !== undefined) { fields.push(`name = $${idx++}`); values.push(dto.name); }
-    if (dto.description !== undefined) { fields.push(`description = $${idx++}`); values.push(dto.description); }
-    if (dto.calculation_unit !== undefined) { fields.push(`calculation_unit = $${idx++}`); values.push(dto.calculation_unit); }
-
-    if (fields.length === 0) {
+    if (Object.keys(data).length === 0) {
       return this.findById(id);
     }
 
-    values.push(id);
-    const result = await this.db.query<Product>(
-      `UPDATE products SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
-      values,
-    );
-    return result.rows[0] ?? null;
+    return this.db.product.update({
+      where: { id },
+      data,
+    });
   }
 
   async delete(id: number): Promise<boolean> {
-    const result = await this.db.query('DELETE FROM products WHERE id = $1', [id]);
-    return (result.rowCount ?? 0) > 0;
+    try {
+      await this.db.product.delete({ where: { id } });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

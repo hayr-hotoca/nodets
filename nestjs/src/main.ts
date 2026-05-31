@@ -24,6 +24,8 @@ async function bootstrap(): Promise<void> {
   app.useStaticAssets(join(__dirname, '..', '..', 'public'), {
     prefix: '/public/',
   });
+  
+  await databaseService.onModuleInit();
 
   const server = await app.listen(port);
 
