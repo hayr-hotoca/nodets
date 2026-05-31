@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, watch, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import LifecycleHost from './components/LifecycleHost.vue'
+import ModalExample from './components/ModalExample.vue'
 import { useLifecycleStore, type LifecyclePhase } from './stores/lifecycle'
 
 const lifecycleStore = useLifecycleStore()
 const { phase, updateCount, lastTransitionAt } = storeToRefs(lifecycleStore)
+
+const modalExampleRef = ref<InstanceType<typeof ModalExample> | null>(null)
+
+const openModal = () => {
+  modalExampleRef.value?.openModal()
+}
 
 const phaseLabel = computed(() => {
   const labels: Record<LifecyclePhase, string> = {
@@ -67,6 +74,14 @@ watch(updateCount, (count) => {
         Lập Phiếu Nhập Kho
       </router-link>
 
+      <button
+        type="button"
+        class="px-4 py-2 bg-primary-light hover:bg-primary-light/80 text-primary rounded-lg transition-colors"
+        @click="openModal"
+      >
+        Open Modal
+      </button>
+
       <span
         class="ml-auto text-xs px-3 py-1 rounded-full font-semibold"
         :class="phaseBadgeClass"
@@ -81,5 +96,7 @@ watch(updateCount, (count) => {
         <component :is="Component" />
       </LifecycleHost>
     </router-view>
+
+    <ModalExample ref="modalExampleRef" />
   </div>
 </template>
