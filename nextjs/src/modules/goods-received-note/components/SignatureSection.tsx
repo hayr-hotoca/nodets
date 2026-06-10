@@ -36,7 +36,6 @@ const SignatureSection: React.FC<SignatureSectionProps> = ({
     <div className="flex flex-col items-center text-center gap-2">
       <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">NGƯỜI GIAO HÀNG</span>
       <input
-        disabled
         value={deliverer}
         onChange={(e) => onDelivererChange(e.target.value)}
         className="border-outline-variant rounded-lg font-body-sm p-1 w-full text-center"

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import DivisionList from './DivisionList'
+import DivisionList from '../../modules/division/components/DivisionList'
 
 export const metadata = {
   title: 'Danh sách Bộ phận',

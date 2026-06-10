@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import GRNForm from '../../components/GRNForm'
+import GRNForm from '../../modules/goods-received-note/components/GRNForm'
 
 const GoodsReceivedNotePage = () => (
   <div className="bg-surface text-on-surface min-h-screen pb-24">

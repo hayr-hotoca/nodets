@@ -1,4 +1,4 @@
-import DivisionForm from './DivisionForm'
+import DivisionForm from '../../../modules/division/components/DivisionForm'
 
 export const metadata = {
   title: 'Thêm Bộ phận',

@@ -11,21 +11,15 @@ import {
   Unit,
   CreateGRNDto,
   GRNProductDto,
-} from '../types/api'
-import FormField from './FormField'
+} from '../../../shared/types/api'
+import FormField from '../../../shared/components/FormField'
 import AccountingSection from './AccountingSection'
 import SignatureSection from './SignatureSection'
-import numberToWords from '../utils/number-to-words'
+import numberToWords from '../../../shared/utils/number-to-words'
 
 /* eslint-disable */
 const GRNForm = () => {
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
-  const [units, setUnits] = useState<Unit[]>([])
-  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null)
-  const [productsList, setProductsList] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
-  const [isDataLoading, setIsDataLoading] = useState(false)
-
   const [formData, setFormData] = useState<Partial<CreateGRNDto>>({
     receipt_date: new Date().toISOString().split('T')[0],
     debit_amount: 0,
@@ -35,65 +29,43 @@ const GRNForm = () => {
     deliverer_name: '',
     storekeeper_name: '',
     chief_accountant_name: '',
-    ref_doc_type: '',
-    ref_doc_number: '',
-    ref_doc_date: '',
-    ref_doc_issuer: '',
-    products: [{
-      id: Date.now(),
-      product_id: 0,
-      qty_actual: 0,
-      qty_document: 0,
-      unit_price: 0,
-    }],
+    products: [{ product_id: 0, qty_actual: 0, qty_document: 0, unit_price: 0 }],
   })
 
-  const { data: divisions = [], isLoading: isDivisionsLoading } = useQuery({
+  // ─── Data Fetching with React Query ─────────────────────
+  const { data: whData } = useQuery({
+    queryKey: ['warehouses'],
+    queryFn: async () => {
+      const res = await fetch('http://localhost:3001/api/warehouses')
+      return res.json()
+    },
+  })
+
+  const { data: divData } = useQuery({
     queryKey: ['divisions'],
     queryFn: async () => {
       const res = await fetch('http://localhost:3001/api/divisions')
-      if (!res.ok) throw new Error('Failed to fetch divisions')
-      const json = await res.json()
-      return (json.data || []) as Division[]
-    }
+      return res.json()
+    },
   })
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsDataLoading(true)
-      try {
-        const [whRes, unitRes, prodRes] = await Promise.all([
-          fetch('http://localhost:3001/api/warehouses'),
-          fetch('http://localhost:3001/api/units'),
-          fetch('http://localhost:3001/api/products'),
-        ])
+  const { data: prodData } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const res = await fetch('http://localhost:3001/api/products')
+      return res.json()
+    },
+  })
 
-        const whData = await whRes.json()
-        const unitData = await unitRes.json()
-        const prodData = await prodRes.json()
+  const warehouses: Warehouse[] = whData?.data || []
+  const divisions: Division[] = divData?.data || []
+  const productsList: Product[] = prodData?.data || []
 
-        setWarehouses(whData.data || [])
-        setUnits(unitData.data || [])
-        setProductsList(prodData.data || [])
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Error fetching data:', error)
-      } finally {
-        setIsDataLoading(false)
-      }
-    }
-    fetchData()
-  }, [])
-
-  const handleChange = (name: string, value: string | number | undefined) => {
+  const handleChange = (name: string, value: any) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleProductChange = (
-    index: number,
-    field: keyof GRNProductDto,
-    value: number,
-  ) => {
+  const handleProductChange = (index: number, field: keyof GRNProductDto, value: any) => {
     const updatedProducts = [...(formData.products || [])]
     updatedProducts[index] = { ...updatedProducts[index], [field]: value }
     setFormData((prev) => ({ ...prev, products: updatedProducts }))
@@ -102,16 +74,7 @@ const GRNForm = () => {
   const addProduct = () => {
     setFormData((prev) => ({
       ...prev,
-      products: [
-        ...(prev.products || []),
-        {
-          id: Date.now(),
-          product_id: 0,
-          qty_actual: 0,
-          qty_document: 0,
-          unit_price: 0,
-        },
-      ],
+      products: [...(prev.products || []), { product_id: 0, qty_actual: 0, qty_document: 0, unit_price: 0 }],
     }))
   }
 
@@ -120,9 +83,7 @@ const GRNForm = () => {
     setFormData((prev) => ({ ...prev, products: updatedProducts }))
   }
 
-  const calculateTotal = () => (
-    (formData.products || []).reduce((sum, p) => sum + (p.qty_actual * p.unit_price), 0)
-  )
+  const calculateTotal = () => (formData.products || []).reduce((sum, p) => sum + (p.qty_actual * p.unit_price), 0)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -139,12 +100,7 @@ const GRNForm = () => {
         toast.success('Tạo phiếu nhập kho thành công!')
       } else {
         const errorData = await response.json()
-        toast.error(errorData.error?.message
-          + ' - '
-          + errorData.error?.details.map((d: { message: string }) => d.message).join(', ')
-          + ' - '
-          + errorData.error?.details.map((d: { field: string }) => d.field).join(', ')
-          || 'Có lỗi xảy ra khi tạo phiếu.')
+        toast.error(errorData.error?.message || 'Có lỗi xảy ra khi tạo phiếu.')
       }
     } catch (error) {
       toast.error('Không thể kết nối tới server.')
@@ -153,33 +109,10 @@ const GRNForm = () => {
     }
   }
 
-  const selectedWarehouse = warehouses.find((w) => w.id == formData.warehouse_id)
   const totalAmount = calculateTotal()
 
   return (
-    <>
-      {(isDataLoading || isDivisionsLoading) && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] transition-all duration-300">
-          <div className="bg-white p-10 rounded-3xl shadow-2xl flex flex-col items-center gap-6 border border-outline-variant animate-in fade-in zoom-in duration-300">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-secondary/20 rounded-full"></div>
-              <div className="w-16 h-16 border-4 border-secondary border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <p className="font-black text-secondary uppercase tracking-[0.2em] text-sm animate-pulse">
-                api data loading
-              </p>
-              <div className="flex gap-1">
-                <div className="w-1.5 h-1.5 bg-secondary/40 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <div className="w-1.5 h-1.5 bg-secondary/40 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                <div className="w-1.5 h-1.5 bg-secondary/40 rounded-full animate-bounce"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="max-w-[1200px] mx-auto px-4 mt-stack-md flex flex-col gap-stack-lg">
+    <form onSubmit={handleSubmit} className="max-w-[1200px] mx-auto px-4 mt-stack-md flex flex-col gap-stack-lg">
       <div className="bg-white rounded-xl paper-shadow p-stack-md flex flex-col gap-stack-lg border border-outline-variant">
 
         <section className="grid grid-cols-1 gap-stack-md">
@@ -216,46 +149,34 @@ const GRNForm = () => {
             </div>
           </div>
 
-          <FormField label="ĐƠN VỊ">
+          <FormField label="KHO HÀNG">
             <select
-              name="unit_id"
-              value={selectedUnitId || ''}
-              onChange={(e) => {
-                const unitId = e.target.value ? parseInt(e.target.value, 10) : null
-                setSelectedUnitId(unitId)
-                // Reset division when unit changes
-                handleChange('division_id', undefined)
-              }}
+              name="warehouse_id"
+              value={formData.warehouse_id || ''}
+              onChange={(e) => handleChange('warehouse_id', parseInt(e.target.value, 10))}
               className="border-outline-variant rounded-lg font-body-md text-body-md p-2 focus:ring-secondary focus:border-secondary"
+              required
             >
-              <option value="">Chọn đơn vị...</option>
-              {units.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.name}
-                </option>
+              <option value="">Chọn kho...</option>
+              {warehouses.map((wh) => (
+                <option key={wh.id} value={wh.id}>{wh.name}</option>
               ))}
             </select>
           </FormField>
 
-          {selectedUnitId && (
-            <FormField label="BỘ PHẬN / PHÒNG BAN">
-              <select
-                name="division_id"
-                value={formData.division_id || ''}
-                onChange={(e) => handleChange('division_id', parseInt(e.target.value, 10))}
-                className="border-outline-variant rounded-lg font-body-md text-body-md p-2 focus:ring-secondary focus:border-secondary"
-              >
-                <option value="">Chọn bộ phận...</option>
-                {divisions
-                  .filter((div) => !selectedUnitId || div.unit_id == selectedUnitId)
-                  .map((div) => (
-                    <option key={div.id} value={div.id}>
-                      {div.name}
-                    </option>
-                  ))}
-              </select>
-            </FormField>
-          )}
+          <FormField label="BỘ PHẬN / PHÒNG BAN">
+            <select
+              name="division_id"
+              value={formData.division_id || ''}
+              onChange={(e) => handleChange('division_id', parseInt(e.target.value, 10))}
+              className="border-outline-variant rounded-lg font-body-md text-body-md p-2 focus:ring-secondary focus:border-secondary"
+            >
+              <option value="">Chọn bộ phận...</option>
+              {divisions.map((div) => (
+                <option key={div.id} value={div.id}>{div.name}</option>
+              ))}
+            </select>
+          </FormField>
         </section>
 
         <hr className="border-outline-variant" />
@@ -271,88 +192,6 @@ const GRNForm = () => {
               type="text"
             />
           </FormField>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-stack-md">
-            <FormField label="THEO">
-              <input
-                name="ref_doc_type"
-                value={formData.ref_doc_type || ''}
-                onChange={(e) => handleChange('ref_doc_type', e.target.value)}
-                className="border-outline-variant rounded-lg font-body-md text-body-md p-2 focus:ring-secondary focus:border-secondary w-full"
-                placeholder="Loại chứng từ (HĐ, ĐH...)"
-                type="text"
-              />
-            </FormField>
-            <FormField label="SỐ">
-              <input
-                name="ref_doc_number"
-                value={formData.ref_doc_number || ''}
-                onChange={(e) => handleChange('ref_doc_number', e.target.value)}
-                className="border-outline-variant rounded-lg font-body-md text-body-md p-2 focus:ring-secondary focus:border-secondary w-full"
-                placeholder="Số chứng từ..."
-                type="text"
-              />
-            </FormField>
-            <FormField label="NGÀY">
-              <input
-                name="ref_doc_date"
-                value={formData.ref_doc_date || ''}
-                onChange={(e) => handleChange('ref_doc_date', e.target.value)}
-                className="border-outline-variant rounded-lg font-body-md text-body-md p-2 focus:ring-secondary focus:border-secondary w-full"
-                type="date"
-              />
-            </FormField>
-            <FormField label="CỦA">
-              <input
-                name="ref_doc_issuer"
-                value={formData.ref_doc_issuer || ''}
-                onChange={(e) => handleChange('ref_doc_issuer', e.target.value)}
-                className="border-outline-variant rounded-lg font-body-md text-body-md p-2 focus:ring-secondary focus:border-secondary w-full"
-                placeholder="Đơn vị phát hành..."
-                type="text"
-              />
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-stack-md items-start items-center">
-            <FormField label="NHẬP TẠI KHO">
-              <select
-                name="warehouse_id"
-                value={formData.warehouse_id || ''}
-                onChange={(e) => handleChange('warehouse_id', parseInt(e.target.value, 10))}
-                className="border-outline-variant rounded-lg font-body-md text-body-md p-2 focus:ring-secondary focus:border-secondary w-full"
-                required
-              >
-                <option value="">Chọn kho...</option>
-                {warehouses.map((wh) => (
-                  <option key={wh.id} value={wh.id}>
-                    {wh.name}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            {selectedWarehouse && (
-              <div className="flex gap-4 mt-7">
-                {selectedWarehouse.location && (
-                  <div className="flex flex-col">
-                    <span className="text-outline text-[10px] uppercase font-bold">Địa điểm</span>
-                    <span className="font-bold text-primary">
-                      {selectedWarehouse.location}
-                    </span>
-                  </div>
-                )}
-                {selectedWarehouse.address && (
-                  <div className="flex flex-col">
-                    <span className="text-outline text-[10px] uppercase font-bold">Địa chỉ</span>
-                    <span className="font-bold text-primary">
-                      {selectedWarehouse.address}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </section>
 
         <hr className="border-outline-variant" />
@@ -366,16 +205,16 @@ const GRNForm = () => {
               className="flex items-center gap-1 text-secondary font-label-caps text-label-caps"
             >
               <span className="material-symbols-outlined text-[18px]">add_circle</span>
-              <span>THÊM</span>
+              {' '}
+              THÊM
             </button>
           </div>
 
           <div className="flex flex-col gap-4">
             {(formData.products || []).map((p, index) => {
-              const selectedProduct = productsList.find((pl) => pl.id == p.product_id)
-
+              const selectedProduct = productsList.find((pl) => pl.id === p.product_id)
               return (
-                <div key={p.id || index} className="border border-outline-variant rounded-lg p-4 bg-white relative">
+                <div key={`${p.product_id}-${index}`} className="border border-outline-variant rounded-lg p-4 bg-white relative">
                   <button
                     type="button"
                     onClick={() => removeProduct(index)}
@@ -389,20 +228,12 @@ const GRNForm = () => {
                       <select
                         value={p.product_id || ''}
                         onChange={(e) => handleProductChange(index, 'product_id', parseInt(e.target.value, 10))}
-                        className={[
-                          'border-outline-variant rounded-lg font-body-md text-body-md',
-                          'p-2 focus:ring-secondary focus:border-secondary w-full',
-                        ].join(' ')}
+                        className="border-outline-variant rounded-lg font-body-md text-body-md p-2 focus:ring-secondary focus:border-secondary w-full"
                         required
                       >
                         <option value="">Chọn vật tư...</option>
                         {productsList.map((prod) => (
-                          <option
-                            disabled={!!(formData.products?.length
-                              && formData.products.find((pd) => pd.product_id == prod.id))}
-                            key={prod.id}
-                            value={prod.id}
-                          >
+                          <option key={prod.id} value={prod.id}>
                             {prod.name}
                           </option>
                         ))}
@@ -428,7 +259,7 @@ const GRNForm = () => {
                       <input
                         value={p.qty_document || 0}
                         onChange={(e) => handleProductChange(index, 'qty_document', parseFloat(e.target.value) || 0)}
-                        className="border border-outline-variant rounded p-1 focus:ring-1 focus:ring-secondary"
+                        className="bg-transparent border-b border-outline-variant p-0 font-bold focus:ring-0"
                         type="number"
                         step="0.001"
                       />
@@ -438,7 +269,7 @@ const GRNForm = () => {
                       <input
                         value={p.qty_actual || 0}
                         onChange={(e) => handleProductChange(index, 'qty_actual', parseFloat(e.target.value) || 0)}
-                        className="border border-outline-variant rounded p-1 focus:ring-1 focus:ring-secondary"
+                        className="bg-transparent border-b border-outline-variant p-0 font-bold focus:ring-0"
                         type="number"
                         step="0.001"
                       />
@@ -448,7 +279,7 @@ const GRNForm = () => {
                       <input
                         value={p.unit_price || 0}
                         onChange={(e) => handleProductChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                        className="border border-outline-variant rounded p-1 focus:ring-1 focus:ring-secondary"
+                        className="bg-transparent border-b border-outline-variant p-0 font-bold focus:ring-0"
                         type="number"
                       />
                     </div>
@@ -468,13 +299,10 @@ const GRNForm = () => {
         </section>
 
         <AccountingSection
-          // @ts-expect-error type mismatch with Partial
-          debit={formData.debit_amount || 0}
-          credit={formData.credit_amount || 0}
           total={totalAmount}
           totalInWords={numberToWords(totalAmount)}
           sourceDocs={formData.source_documents || 0}
-          onSourceDocsChange={(val: number) => handleChange('source_documents', val)}
+          onSourceDocsChange={(val) => handleChange('source_documents', val)}
         />
 
         <SignatureSection
@@ -506,7 +334,6 @@ const GRNForm = () => {
         </button>
       </div>
     </form>
-  </>
   )
 }
 

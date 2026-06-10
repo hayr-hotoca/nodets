@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import { useForm } from '@tanstack/react-form'
 import * as z from 'zod'
-import { Unit } from '../../../types/api'
-import FormField from '../../../components/FormField'
+import { Unit } from '../../../shared/types/api'
+import FormField from '../../../shared/components/FormField'
 
 const formSchema = z.object({
   code: z.string().min(5, "Mã bộ phận ít nhất 5 ký tự").max(32, "Mã bộ phận tối đa 32 ký tự"),

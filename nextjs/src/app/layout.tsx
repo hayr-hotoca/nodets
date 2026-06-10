@@ -3,12 +3,12 @@
 import { useRef } from 'react'
 import { Toaster } from 'react-hot-toast'
 import './globals.css'
-import QueryProvider from '../providers/QueryProvider'
-import ModalExample, { ModalExampleRef } from '../components/ModalExample'
-import { AuthProvider, useAuth } from '../contexts/AuthContext'
-import { AuthGuard } from '../components/auth/AuthGuard'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
+import QueryProvider from '../shared/providers/QueryProvider'
+import ModalExample, { ModalExampleRef } from '../shared/components/ModalExample'
+import { AuthProvider, useAuth } from '../modules/auth/contexts/AuthContext'
+import { AuthGuard } from '../modules/auth/components/AuthGuard'
 
 const Navigation = ({ onOpenModal }: { onOpenModal: () => void }) => {
   const { user, logout, isAuthenticated } = useAuth()
