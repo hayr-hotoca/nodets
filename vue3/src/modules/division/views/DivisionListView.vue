@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
-import { api } from '../../services/api'
-import type { Division } from '../../types/api'
+import { api } from '../../../services/api'
+import type { Division } from '../../../shared/types/api'
 
 const { data, isLoading, isError, error } = useQuery<Division[]>({
   queryKey: ['divisions'],
@@ -15,7 +15,7 @@ const { data, isLoading, isError, error } = useQuery<Division[]>({
       <h1 class="text-2xl font-display font-semibold text-on-surface">Danh sách Bộ phận</h1>
       <router-link 
         to="/division/new" 
-        class="h-10 px-4 bg-primary hover:bg-primary-dark text-on-primary font-medium rounded-full flex items-center transition-colors"
+        class="h-10 px-4 bg-primary text-on-primary font-medium rounded-full flex items-center transition-colors hover:opacity-90"
       >
         Thêm Bộ phận
       </router-link>
@@ -48,13 +48,13 @@ const { data, isLoading, isError, error } = useQuery<Division[]>({
           <tbody class="text-on-surface-variant">
             <tr 
               v-for="division in data" 
-              :key="division.id" 
-              class="border-b border-outline-variant hover:bg-surface-container-low transition-colors"
+              :key="division.id"
+              class="border-b border-outline-variant hover:bg-surface-variant/30 transition-colors"
             >
-              <td class="p-4 whitespace-nowrap">{{ division.id }}</td>
-              <td class="p-4 whitespace-nowrap font-medium text-primary">{{ division.code }}</td>
-              <td class="p-4 whitespace-nowrap font-medium text-on-surface">{{ division.name }}</td>
-              <td class="p-4 whitespace-nowrap">{{ division.unit_id }}</td>
+              <td class="p-4">{{ division.id }}</td>
+              <td class="p-4">{{ division.code }}</td>
+              <td class="p-4">{{ division.name }}</td>
+              <td class="p-4">{{ division.unit_id }}</td>
             </tr>
           </tbody>
         </table>

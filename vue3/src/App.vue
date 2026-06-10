@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import { computed, watch, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import LifecycleHost from './components/LifecycleHost.vue'
-import ModalExample from './components/ModalExample.vue'
-import { useLifecycleStore, type LifecyclePhase } from './stores/lifecycle'
+import LifecycleHost from './shared/components/LifecycleHost.vue'
+import ModalExample from './shared/components/ModalExample.vue'
+import { useLifecycleStore, type LifecyclePhase } from './shared/stores/lifecycle'
+import { useAuthStore } from './modules/auth/stores/useAuthStore'
+import { useRouter } from 'vue-router'
 
 const lifecycleStore = useLifecycleStore()
+const authStore = useAuthStore()
 const { phase, updateCount, lastTransitionAt } = storeToRefs(lifecycleStore)
+const router = useRouter()
 
 const modalExampleRef = ref<InstanceType<typeof ModalExample> | null>(null)
 
 const openModal = () => {
   modalExampleRef.value?.openModal()
+}
+
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/login')
 }
 
 const phaseLabel = computed(() => {
@@ -51,44 +60,47 @@ watch(updateCount, (count) => {
 
 <template>
   <div>
-    <nav class="bg-primary text-on-primary p-4 flex flex-wrap gap-4 items-center font-medium shadow-md">
+    <nav v-if="authStore.isAuthenticated" class="bg-primary-container text-on-primary-container p-4 flex flex-wrap gap-4 items-center font-medium shadow-md">
       <router-link
         to="/division"
-        class="hover:text-primary-light transition-colors"
-        active-class="text-primary-light font-bold"
+        class="hover:text-on-primary-container/80 transition-colors"
+        active-class="font-bold"
       >
         Danh sách Bộ phận
       </router-link>
       <router-link
         to="/division/new"
-        class="hover:text-primary-light transition-colors"
-        active-class="text-primary-light font-bold"
+        class="hover:text-on-primary-container/80 transition-colors"
+        active-class="font-bold"
       >
         Thêm Bộ phận
       </router-link>
       <router-link
         to="/goods-received-note"
-        class="hover:text-primary-light transition-colors"
-        active-class="text-primary-light font-bold"
+        class="hover:text-on-primary-container/80 transition-colors"
+        active-class="font-bold"
       >
         Lập Phiếu Nhập Kho
       </router-link>
 
       <button
         type="button"
-        class="px-4 py-2 bg-primary-light hover:bg-primary-light/80 text-primary rounded-lg transition-colors"
+        class="px-4 py-2 bg-secondary text-on-secondary rounded-lg transition-colors hover:opacity-90"
         @click="openModal"
       >
         Open Modal
       </button>
 
-      <span
-        class="ml-auto text-xs px-3 py-1 rounded-full font-semibold"
-        :class="phaseBadgeClass"
-        :title="lastTransitionAt ? `Lần cuối: ${new Date(lastTransitionAt).toLocaleTimeString('vi-VN')}` : ''"
-      >
-        {{ phaseLabel }} ({{ updateCount }}x updated)
-      </span>
+      <div class="ml-auto flex items-center gap-4">
+        <span class="text-sm">{{ authStore.user?.name }}</span>
+        <button
+          type="button"
+          @click="handleLogout"
+          class="p-2 hover:bg-white/10 rounded-full transition-colors"
+        >
+          <span class="material-symbols-outlined text-[20px]">logout</span>
+        </button>
+      </div>
     </nav>
 
     <router-view v-slot="{ Component, route }">
@@ -97,6 +109,6 @@ watch(updateCount, (count) => {
       </LifecycleHost>
     </router-view>
 
-    <ModalExample ref="modalExampleRef" />
+    <ModalExample v-if="authStore.isAuthenticated" ref="modalExampleRef" />
   </div>
 </template>
