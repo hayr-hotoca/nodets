@@ -2,9 +2,49 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '../modules/auth/stores/useAuthStore'
 import LoginView from '../modules/auth/views/LoginView.vue'
-import DivisionListView from '../modules/division/views/DivisionListView.vue'
-import DivisionFormView from '../modules/division/views/DivisionFormView.vue'
-import GRNFormView from '../modules/goods-received-note/views/GRNFormView.vue'
+
+// Auto-load all view components using import.meta.glob
+const viewModules = import.meta.glob('../modules/**/views/*.vue')
+// ../modules/auth/views/LoginView.vue: () => {…}
+// ../modules/dashboard/views/DashboardView.vue: () => {…}
+// ../modules/division/views/DivisionFormView.vue: () => {…}
+// ../modules/division/views/DivisionListView.vue: () => {…}
+// ../modules/goods-received-note/views/GRNFormView.vue: () => {…}
+// ../modules/product/views/ProductListView.vue: () => {…}
+// ../modules/unit/views/UnitListView.vue: () => {…}
+// ../modules/warehouse/views/WarehouseListView.vue: () => {…}
+
+// Auto-generate routes from loaded components
+const autoRoutes: RouteRecordRaw[] = Object.entries(viewModules).map(
+  ([path, component]) => {
+    // Extract module name and view name from file path
+    // Example path: '../modules/division/views/DivisionListView.vue'
+    const pathParts = path.split('/')
+    const moduleName = pathParts[pathParts.length - 3]
+    const fileName = pathParts[pathParts.length - 1]
+    const viewName = fileName.replace('View.vue', '')
+
+    // Generate route path based on module and view name
+    let routePath = `/${moduleName}`
+    if (!viewName.toLowerCase().includes('list') && !viewName.toLowerCase().includes('dashboard')) {
+      // For non-list, non-dashboard views, add the view name to path (e.g., /division/new)
+      routePath += `/${viewName.toLowerCase()}`
+    }
+
+    // Generate route name from module and view
+    const routeName = `${moduleName}-${viewName}`
+
+    return {
+      path: routePath,
+      name: routeName,
+      component: component,
+      meta: { 
+        title: `${viewName.replace(/([A-Z])/g, ' $1').trim()} - ${moduleName}`, 
+        requiresAuth: moduleName !== 'auth' 
+      }
+    }
+  }
+)
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -15,26 +55,10 @@ const routes: Array<RouteRecordRaw> = [
   },
   {
     path: '/',
-    redirect: '/division'
+    redirect: '/dashboard'
   },
-  {
-    path: '/division',
-    name: 'DivisionList',
-    component: DivisionListView,
-    meta: { title: 'Danh sách Bộ phận', requiresAuth: true }
-  },
-  {
-    path: '/division/new',
-    name: 'DivisionForm',
-    component: DivisionFormView,
-    meta: { title: 'Thêm Bộ phận', requiresAuth: true }
-  },
-  {
-    path: '/goods-received-note',
-    name: 'GoodsReceivedNote',
-    component: GRNFormView,
-    meta: { title: 'Phiếu Nhập Kho', requiresAuth: true }
-  }
+  // Include auto-generated routes
+  ...autoRoutes
 ]
 
 const router = createRouter({
@@ -54,5 +78,7 @@ router.beforeEach((to, _from, next) => {
     next()
   }
 })
+
+console.log('🚀 Auto-generated routes:', routes)
 
 export default router

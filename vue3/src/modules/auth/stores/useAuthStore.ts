@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 interface User {
   name: string
@@ -7,12 +7,14 @@ interface User {
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(() => {
-    const storedUser = localStorage.getItem('user')
-    return storedUser ? JSON.parse(storedUser) as User : null
-  })
+  const user = ref<User | null>(null)
 
   const isAuthenticated = computed(() => !!user.value)
+
+  onMounted(() => {
+    const storedUser = localStorage.getItem('user')
+    user.value = storedUser ? JSON.parse(storedUser) as User : null
+  });
 
   function login(name: string, role: string) {
     user.value = { name, role }

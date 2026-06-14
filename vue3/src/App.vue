@@ -5,12 +5,13 @@ import LifecycleHost from './shared/components/LifecycleHost.vue'
 import ModalExample from './shared/components/ModalExample.vue'
 import { useLifecycleStore, type LifecyclePhase } from './shared/stores/lifecycle'
 import { useAuthStore } from './modules/auth/stores/useAuthStore'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const lifecycleStore = useLifecycleStore()
 const authStore = useAuthStore()
 const { phase, updateCount, lastTransitionAt } = storeToRefs(lifecycleStore)
 const router = useRouter()
+const route = useRoute()
 
 const modalExampleRef = ref<InstanceType<typeof ModalExample> | null>(null)
 
@@ -22,6 +23,18 @@ const handleLogout = () => {
   authStore.logout()
   router.push('/login')
 }
+
+// Filter routes for navigation
+const navigationRoutes = computed(() => {
+  return router.getRoutes().filter(
+    r => 
+      !r.path.includes('*') && 
+      r.path !== '/' && 
+      r.path !== '/login' && 
+      !r.path.includes('/new') && 
+      r.meta?.requiresAuth
+  )
+})
 
 const phaseLabel = computed(() => {
   const labels: Record<LifecyclePhase, string> = {
@@ -62,36 +75,24 @@ watch(updateCount, (count) => {
   <div>
     <nav v-if="authStore.isAuthenticated" class="bg-primary-container text-on-primary-container p-4 flex flex-wrap gap-4 items-center font-medium shadow-md">
       <router-link
-        to="/division"
+        v-for="navRoute in navigationRoutes"
+        :key="navRoute.path"
+        :to="navRoute.path"
         class="hover:text-on-primary-container/80 transition-colors"
         active-class="font-bold"
       >
-        Danh sách Bộ phận
-      </router-link>
-      <router-link
-        to="/division/new"
-        class="hover:text-on-primary-container/80 transition-colors"
-        active-class="font-bold"
-      >
-        Thêm Bộ phận
-      </router-link>
-      <router-link
-        to="/goods-received-note"
-        class="hover:text-on-primary-container/80 transition-colors"
-        active-class="font-bold"
-      >
-        Lập Phiếu Nhập Kho
+        {{ navRoute.meta?.title?.toString() || navRoute.name }}
       </router-link>
 
       <button
         type="button"
-        class="px-4 py-2 bg-secondary text-on-secondary rounded-lg transition-colors hover:opacity-90"
+        class="px-4 py-2 bg-secondary text-on-secondary rounded-lg transition-colors hover:opacity-90 ml-auto"
         @click="openModal"
       >
         Open Modal
       </button>
 
-      <div class="ml-auto flex items-center gap-4">
+      <div class="flex items-center gap-4">
         <span class="text-sm">{{ authStore.user?.name }}</span>
         <button
           type="button"
